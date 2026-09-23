@@ -108,3 +108,24 @@ inventoried as UNKNOWN. Every recoverable integer connection on such a cell is
 conservatively treated as possibly driven, because its port metadata cannot be
 trusted; connected data and clock paths may therefore also become UNKNOWN.
 This is not full JSON-schema validation. See [validation evidence](SCALAR_PORT_EVIDENCE.md).
+
+## Endpoint source traces
+
+JSON findings now retain both mapped endpoints' original `src` annotations as
+`source_location` / `destination_location`. `source_q_aliases` and
+`destination_d_aliases` list every Yosys netname for those pins, with `name` and
+`offset` (position in the bit array, not an HDL subscript). Empty strings/lists
+mean unavailable metadata. Names and locations are supplied by the netlist;
+they are not independently verified file contents, unique identities or waivers.
+The existing `source` field and text output remain unchanged. Malformed netname
+metadata fails input validation rather than producing misleading traces.
+
+The pinned OpenTitan request/acknowledge pilot exercises these traces:
+
+```sh
+python3 run_opentitan_reqack_pilot.py /path/to/clean/opentitan /tmp/new-reqack-evidence
+```
+
+It requires Yosys with `read_slang`, the documented OpenTitan pin, and simple paths
+without spaces/metacharacters. It returns 2 (UNKNOWN) after collecting structural
+evidence, or 1 on an unmet required check. See [pilot evidence](OPENTITAN_REQACK_EVIDENCE.md).

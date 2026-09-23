@@ -69,6 +69,21 @@ def check(data, top, input_domains=None):
         raise ValueError(f"top module {top!r} not found")
     mod = modules[top]
     cells = mod.get("cells", {})
+    aliases = defaultdict(list)
+    netnames = mod.get("netnames", {})
+    if not isinstance(netnames, dict):
+        raise ValueError('netnames must be an object')
+    for name, net in netnames.items():
+        if (not isinstance(name, str) or not isinstance(net, dict) or
+                not isinstance(net.get('bits'), list)):
+            raise ValueError('netnames entries require names and bit lists')
+        for offset, bit in enumerate(net['bits']):
+            if type(bit) is int and bit >= 0:
+                aliases[bitkey(bit)].append({'name': name, 'offset': offset})
+            elif not (isinstance(bit, str) and bit in {'0', '1', 'x', 'z'}):
+                raise ValueError(f'{name}: invalid netname bit')
+    for names in aliases.values():
+        names.sort(key=lambda item: (item['name'], item['offset']))
     primary = input_domain_sources(mod.get('ports', {}), input_domains) if input_domains is not None else None
     drivers, unknowns, ffs, inputs = defaultdict(list), defaultdict(list), {}, set()
     unknown_cells = []
@@ -216,6 +231,9 @@ def check(data, top, input_domains=None):
                 continue
             endpoint = ffs.get(report[f"{role}_cell"], {})
             if endpoint:
+                report[f"{role}_location"] = endpoint['src']
+                pin = 'q' if role == 'source' else 'd'
+                report[f"{role}_{pin}_aliases"] = aliases.get(endpoint[pin], [])
                 report[f"{role}_clock_bit"] = endpoint['clk']
                 report[f"{role}_clock_edge"] = endpoint['edge']
             if "reset" in endpoint:
