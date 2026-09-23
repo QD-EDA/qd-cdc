@@ -28,3 +28,12 @@ remain UNKNOWN. Preserve source ports, bit offsets and assumptions. JSON in this
 mode wraps findings with all declarations, including when findings are empty.
 This is not a waiver system or verified external timing. Legacy mode remains
 compatible and explicitly omits primary-input domains from findings.
+
+## Clock endpoint resolution correction
+
+Validate both source and destination clock origins against supported and unknown
+internal drivers. Preserve unresolved launch paths as UNKNOWN with source identity.
+Report same-net opposite-edge mapped-flop transfers as UNKNOWN rather than dropping
+them. Include endpoint clock bits/edges without changing report containers or exit
+codes. Preserve resolved same-edge behavior and primary-input assumption semantics;
+do not infer generated-clock relationships or half-cycle timing safety.

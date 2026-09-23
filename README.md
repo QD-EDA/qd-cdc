@@ -75,3 +75,14 @@ This covers top-level input fan-in of supported DFFs, not output timing, inout
 boundaries, external clocks absent from the top, generated-clock relationships,
 per-bit domain specifications, edge relationships or full design coverage.
 See [input-domain evidence](INPUT_DOMAIN_EVIDENCE.md).
+
+## Launch and capture clock boundaries
+
+Both mapped flop clocks must resolve directly to top-level inputs without any
+internal driver before a data path receives a crossing/candidate classification.
+Unresolved launch clocks and opposite-edge transfers on the same net remain
+UNKNOWN. Same-net opposite edges need timing evidence; their visibility is not
+an assertion of asynchronous CDC. Findings include mapped endpoint clock bits
+and edges. Input-domain declarations still do not specify launch edges.
+See [clock endpoint evidence](CLOCK_ENDPOINT_EVIDENCE.md) for the Caliptra pilot
+and supported limits.
