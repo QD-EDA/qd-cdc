@@ -127,6 +127,8 @@ def check(data, top, input_domains=None):
         if bit in seen: return [(None, trail + ("combinational loop",), True)]
         if bit in inputs:
             if primary is None:
+                if drivers.get(bit) or unknowns.get(bit):
+                    return [(None, trail + (f"PRIMARY_INPUT net {bit}: input net also has internal driver",), True)]
                 return [(None, trail + ("PRIMARY_INPUT",), False)]
             src = primary[bit]
             ambiguous = drivers.get(bit) or unknowns.get(bit)
@@ -148,11 +150,16 @@ def check(data, top, input_domains=None):
                 for ib in ins: found.extend(sources(bitkey(ib), trail + (f"{cell}.{port}",), seen | {bit}))
             else: found.append((None, trail + (f"{cell}.{port}",), True))
         for cell, why in unknowns.get(bit, []): found.append((None, trail + (f"{cell}: {why}",), True))
+        if len(drivers.get(bit, [])) + len(unknowns.get(bit, [])) > 1:
+            found = [(src, path + (f"multiple drivers on net {bit}",), True)
+                     for src, path, _ in found]
         return found or [(None, trail + (f"unresolved net {bit}",), True)]
 
     # Candidate requires both destination stages explicitly annotated, same clock,
     # and a direct Q-to-D stage connection.
-    second_stage = {f["d"]: f for f in ffs.values() if f["async"]}
+    second_stage = defaultdict(list)
+    for ff in ffs.values():
+        second_stage[ff['d']].append(ff)
     reports = []
     for name, typ, src in unknown_cells:
         reports.append({"top": top, "source_cell": name, "source_clock": "UNKNOWN", "destination_cell": name,
@@ -184,8 +191,11 @@ def check(data, top, input_domains=None):
             elif src is None or src["clk"] == dst["clk"]:
                 continue
             else:
-                following = second_stage.get(dst["q"])
-                candidate = (following and following["clk"] == dst["clk"] and
+                stages = second_stage.get(dst['q'], [])
+                following = stages[0] if len(stages) == 1 else None
+                candidate = (following and drivers.get(dst['q']) == [(dst['name'], 'Q')] and
+                             not unknowns.get(dst['q']) and dst['q'] not in inputs and
+                             following["clk"] == dst["clk"] and
                              following["edge"] == dst["edge"] and
                              following.get("reset") == dst.get("reset") and
                              dst["async"] and following["async"])

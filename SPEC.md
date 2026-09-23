@@ -37,3 +37,12 @@ Report same-net opposite-edge mapped-flop transfers as UNKNOWN rather than dropp
 them. Include endpoint clock bits/edges without changing report containers or exit
 codes. Preserve resolved same-edge behavior and primary-input assumption semantics;
 do not infer generated-clock relationships or half-cycle timing safety.
+
+## Ambiguous data connectivity
+
+Propagate multiple-driver uncertainty through supported combinational traversal,
+preserving all enumerated driver paths as UNKNOWN instead of resolved crossing
+or candidate labels. Conflicting internal drivers on primary-input nets must be
+visible even in legacy mode. Candidate hints require one mapped-flop D consumer
+and an unambiguous first-stage Q driver; cell ordering must not change results.
+Preserve ordinary single-driver and existing Caliptra pilot behavior.
