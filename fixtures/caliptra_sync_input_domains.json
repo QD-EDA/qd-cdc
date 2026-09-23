@@ -1,0 +1,6 @@
+{
+  "din": {
+    "clock": "clk_a",
+    "evidence": "QD harness integration assumption: external din is synchronous to clk_a; not proven by caliptra_sync_pilot.sv"
+  }
+}

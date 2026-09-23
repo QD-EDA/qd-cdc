@@ -18,3 +18,13 @@ matching clock edges and reset mappings for the existing candidate-chain hint.
 Preserve CLI/report-list structure and original passing tests. Validate all eight
 types, malformed mappings, constants, generated clocks and candidate boundaries;
 pilot the unmodified pinned Caliptra WIDTH=1/RST_VAL=0 synchronizer in a QD harness.
+
+## Input-domain audit slice
+
+`--input-domains FILE` opts into primary-input data analysis, using a JSON object
+of port names mapped to clock/evidence strings. Validate top-level input names,
+scalar clock inputs, legal input bits and alias consistency. Undeclared paths
+remain UNKNOWN. Preserve source ports, bit offsets and assumptions. JSON in this
+mode wraps findings with all declarations, including when findings are empty.
+This is not a waiver system or verified external timing. Legacy mode remains
+compatible and explicitly omits primary-input domains from findings.
