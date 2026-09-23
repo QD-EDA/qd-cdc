@@ -33,6 +33,9 @@ class CDCTest(unittest.TestCase):
         cells = {"src": ff(1, 2, 10), "stage1": ff(2, 3, 11, True), "stage2": ff(3, 4, 11, True)}
         r = check(net(cells), "top")
         self.assertEqual([x["classification"] for x in r], ["CANDIDATE_SYNCHRONIZER"])
+        with tempfile.NamedTemporaryFile("w", suffix=".json") as f:
+            json.dump(net(cells), f); f.flush()
+            self.assertEqual(main(["check", f.name, "--top", "top"]), 1)
 
     def test_unannotated_chain_is_crossing(self):
         cells = {"src": ff(1, 2, 10), "stage1": ff(2, 3, 11), "stage2": ff(3, 4, 11)}

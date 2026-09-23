@@ -130,7 +130,7 @@ def main(argv=None):
     else:
         for r in reports:
             print(f"{r['classification']}: {r['top']} {r['source_cell']}@{r['source_clock']} -> {r['destination_cell']}@{r['destination_clock']} path={' -> '.join(r['path'])} source={r['source'] or 'unknown'}")
-    return 1 if any(r["classification"] in {"CROSSING", "UNKNOWN"} for r in reports) else 0
+    return 1 if reports else 0
 
 
 if __name__ == "__main__":
