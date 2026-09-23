@@ -1,0 +1,9 @@
+# QD-CDC v0 scope
+
+Build a conservative structural clock-domain-crossing triage tool for synthesized Yosys JSON, not a substitute for Questa CDC signoff. This tool exists to find concrete Caliptra/OpenTitan candidate crossings with an auditable path. Do not claim that an unreported crossing is safe.
+
+CLI: `qd-cdc check netlist.json --top TOP [--json]`. Read Yosys `write_json` modules, cells, connections, and attributes. Identify supported edge-triggered DFFs and their clock nets. For each receiving DFF D input, traverse supported combinational cells backwards to source DFF Q nets and primary inputs, report source-clock to destination-clock paths when clocks differ. Recognize an explicit `async_reg` attribute on a two-flop destination chain as a candidate synchronizer and report it separately; do not blanket-waive it as proven safe. Report black boxes, unknown sequential cells, unsupported combinational cells, gated/derived clocks, and paths that cannot be resolved as UNKNOWN.
+
+Diagnostics must include top, source/destination cell and clock, path, classification, source file/line if present, and a deterministic exit code. Optional JSON output. Treat related generated clocks as unrelated unless an explicit user map is supplied and documented. No implicit waivers and no parser that silently drops cells.
+
+Tests: direct crossing flagged; same-clock path not flagged; two-flop annotated candidate; unannotated two-flop still flagged; combinational crossing; unknown/blackbox path preserved as UNKNOWN; reproducible JSON ordering. Use Python standard library. If feasible, add one tiny Verilog fixture and invoke installed Yosys to generate a real JSON input, but keep pure JSON tests so the repo works without Yosys. Add README with exact supported Yosys cell types, limits, Apache-2.0 license, and local test command. Do not edit Caliptra or Icarus sources. Do not commit/push/create remote; coordinator handles publication.

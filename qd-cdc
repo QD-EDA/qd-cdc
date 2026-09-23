@@ -1,0 +1,4 @@
+#!/usr/bin/env python3
+from qd_cdc import main
+
+raise SystemExit(main())
