@@ -53,3 +53,9 @@ Local raw logs, netlists, reports, commands, hashes and tests are retained in
 The installed dirty Yosys build, incomplete input-schema validation, hierarchical
 state inventory, generated-clock constraints, broad fanout/reconvergence analysis,
 independent CDC comparison and performance targets remain qualification gaps.
+
+A fresh clone of `c204cde` repeated all 31 tests on both Python versions,
+independently synthesized the conflicting-driver fixture and all three Caliptra
+configurations, and produced matching reports. This repeats workspaces on the
+same installed toolchain. Tiny-case CLI timings are recorded in commands.json;
+no large-netlist performance or peak-memory qualification is claimed.
