@@ -66,7 +66,9 @@ def input_domain_sources(ports, domains):
     return result
 
 
-def check(data, top, input_domains=None):
+def check(data, top, input_domains=None, max_traversal_work=1_000_000):
+    if type(max_traversal_work) is not int or max_traversal_work <= 0:
+        raise ValueError('max traversal work must be a positive integer')
     modules = data.get("modules", {})
     if top not in modules:
         raise ValueError(f"top module {top!r} not found")
@@ -151,39 +153,83 @@ def check(data, top, input_domains=None):
     def clock_resolved(bit):
         return bit in inputs and not drivers.get(bit) and not unknowns.get(bit)
 
-    # Trace each D through supported combinational fan-in. Each path retains the
-    # cell trail so a black box or unsupported primitive cannot disappear.
-    def sources(bit, trail=(), seen=frozenset()):
-        if bit in seen: return [(None, trail + ("combinational loop",), True)]
-        if bit in inputs:
-            if primary is None:
-                if drivers.get(bit) or unknowns.get(bit):
-                    return [(None, trail + (f"PRIMARY_INPUT net {bit}: input net also has internal driver",), True)]
-                return [(None, trail + ("PRIMARY_INPUT",), False)]
-            src = primary[bit]
-            ambiguous = drivers.get(bit) or unknowns.get(bit)
-            clock_unresolved = drivers.get(src['clk']) or unknowns.get(src['clk'])
-            reason = ('input net also has internal driver' if ambiguous else
-                      'input-domain clock has internal driver' if clock_unresolved else
-                      'input domain undeclared' if src['clk'] == 'UNKNOWN' else 'declared input domain')
-            return [(src, trail + (f"PRIMARY_INPUT net {bit}: {reason}",),
-                     bool(ambiguous or clock_unresolved or src['clk'] == 'UNKNOWN'))]
-        found = []
-        for cell, port in drivers.get(bit, []):
-            if cell in ffs:
-                found.append((ffs[cell], trail + (f"{cell}.Q",), False))
-                continue
-            # Find all fan-in bits for a supported combinational driver.
-            c = cells[cell]
-            ins = [b for p, bs in c["connections"].items() if c.get("port_directions", {}).get(p) == "input" for b in bs]
-            if ins:
-                for ib in ins: found.extend(sources(bitkey(ib), trail + (f"{cell}.{port}",), seen | {bit}))
-            else: found.append((None, trail + (f"{cell}.{port}",), True))
-        for cell, why in unknowns.get(bit, []): found.append((None, trail + (f"{cell}: {why}",), True))
-        if len(drivers.get(bit, [])) + len(unknowns.get(bit, [])) > 1:
-            found = [(src, path + (f"multiple drivers on net {bit}",), True)
-                     for src, path, _ in found]
-        return found or [(None, trail + (f"unresolved net {bit}",), True)]
+    # Stable traversal order matters when a finite budget yields a partial report.
+    for entries in drivers.values():
+        entries.sort()
+    for entries in unknowns.values():
+        entries.sort()
+    remaining_work = max_traversal_work
+    limit_path = ("traversal work budget exhausted; unexamined path count unknown",)
+
+    def sources(start):
+        nonlocal remaining_work
+        stack = [("visit", start)]
+        trail, ambiguity, active = [], [], set()
+        while stack:
+            action, value = stack.pop()
+            cost = 0
+            if action == "visit":
+                cost = 1
+            elif action == "leaf":
+                cost = len(trail) + len(ambiguity) + 1
+            if cost > remaining_work:
+                yield None, limit_path, True
+                return
+            remaining_work -= cost
+            if action == "pop_path":
+                trail.pop()
+            elif action == "leave":
+                bit, multiple = value
+                active.remove(bit)
+                if multiple:
+                    ambiguity.pop()
+            elif action == "descend":
+                bit, label = value
+                trail.append(label)
+                stack.extend([("pop_path", None), ("visit", bit)])
+            elif action == "leaf":
+                src, label, unknown = value
+                yield src, tuple(trail) + (label,) + tuple(reversed(ambiguity)), bool(unknown or ambiguity)
+            else:
+                bit = value
+                if bit in active:
+                    stack.append(("leaf", (None, "combinational loop", True)))
+                    continue
+                if bit in inputs:
+                    ambiguous = drivers.get(bit) or unknowns.get(bit)
+                    if primary is None:
+                        label = (f"PRIMARY_INPUT net {bit}: input net also has internal driver"
+                                 if ambiguous else "PRIMARY_INPUT")
+                        stack.append(("leaf", (None, label, bool(ambiguous))))
+                    else:
+                        src = primary[bit]
+                        clock_unresolved = drivers.get(src['clk']) or unknowns.get(src['clk'])
+                        reason = ('input net also has internal driver' if ambiguous else
+                                  'input-domain clock has internal driver' if clock_unresolved else
+                                  'input domain undeclared' if src['clk'] == 'UNKNOWN' else 'declared input domain')
+                        stack.append(("leaf", (src, f"PRIMARY_INPUT net {bit}: {reason}",
+                                      bool(ambiguous or clock_unresolved or src['clk'] == 'UNKNOWN'))))
+                    continue
+                multiple = len(drivers.get(bit, [])) + len(unknowns.get(bit, [])) > 1
+                active.add(bit)
+                if multiple:
+                    ambiguity.append(f"multiple drivers on net {bit}")
+                stack.append(("leave", (bit, multiple)))
+                actions = []
+                for cell, port in drivers.get(bit, []):
+                    if cell in ffs:
+                        actions.append(("leaf", (ffs[cell], f"{cell}.Q", False)))
+                        continue
+                    c = cells[cell]
+                    ins = [b for p, bs in sorted(c["connections"].items())
+                           if c.get("port_directions", {}).get(p) == "input" for b in bs]
+                    actions.extend(("descend", (bitkey(ib), f"{cell}.{port}")) for ib in ins)
+                    if not ins:
+                        actions.append(("leaf", (None, f"{cell}.{port}", True)))
+                actions.extend(("leaf", (None, f"{cell}: {why}", True)) for cell, why in unknowns.get(bit, []))
+                if not actions:
+                    actions.append(("leaf", (None, f"unresolved net {bit}", True)))
+                stack.extend(reversed(actions))
 
     # Candidate requires both destination stages explicitly annotated, same clock,
     # and a direct Q-to-D stage connection.
@@ -195,7 +241,7 @@ def check(data, top, input_domains=None):
         reports.append({"top": top, "source_cell": name, "source_clock": "UNKNOWN", "destination_cell": name,
                         "destination_clock": "UNKNOWN", "path": [f"unsupported cell {typ}"],
                         "classification": "UNKNOWN", "source": src})
-    for dst in ffs.values():
+    for _, dst in sorted(ffs.items()):
         if "reset" in dst:
             reports.append({"top": top, "source_cell": "UNKNOWN", "source_clock": "UNKNOWN",
                             "destination_cell": dst["name"], "destination_clock": dst["clk"],
@@ -233,6 +279,8 @@ def check(data, top, input_domains=None):
                 reports.append({"top": top, "source_cell": src["name"], "source_clock": src["clk"], "destination_cell": dst["name"],
                                 "destination_clock": dst["clk"], "path": list(path),
                                 "classification": "CANDIDATE_SYNCHRONIZER" if candidate else "CROSSING", "source": dst["src"] or src["src"]})
+            if path == limit_path:
+                reports[-1].update(analysis_incomplete=True, max_traversal_work=max_traversal_work)
             if src and 'source_ports' in src:
                 reports[-1].update({key: src[key] for key in
                                    ('source_ports', 'source_bit', 'input_domain_assumptions')})
@@ -262,6 +310,8 @@ def main(argv=None):
     c.add_argument("--top", required=True)
     c.add_argument("--json", action="store_true")
     c.add_argument('--input-domains', help='JSON port-to-clock assumptions; {} audits all inputs as undeclared')
+    c.add_argument('--max-traversal-work', type=int, default=1_000_000,
+                   help='global budget for visited nets and emitted path labels (default: 1000000)')
     a = p.parse_args(argv)
     try:
         domains = None
@@ -269,7 +319,8 @@ def main(argv=None):
             with open(a.input_domains) as f: domains = json.load(f)
             if not isinstance(domains, dict):
                 raise ValueError('input domains must be an object')
-        with open(a.netlist) as f: reports = check(json.load(f), a.top, input_domains=domains)
+        with open(a.netlist) as f: reports = check(json.load(f), a.top, input_domains=domains,
+                                                  max_traversal_work=a.max_traversal_work)
     except (OSError, json.JSONDecodeError, ValueError) as e:
         print(f"qd-cdc: {e}", file=sys.stderr)
         return 2
