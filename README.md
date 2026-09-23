@@ -96,3 +96,15 @@ hints require one mapped-flop second-stage consumer and an unambiguous first-sta
 Q driver. This does not prove arbitrary fanout or reconvergence safe. See
 [ambiguity evidence](AMBIGUOUS_PATH_EVIDENCE.md) for the independent Yosys negative
 fixture and preserved Caliptra results.
+
+## Scalar flop input validation
+
+All ten supported DFF types require exact scalar ports and matching declared
+port directions before receiving clock/data semantics. Plain DFFs require
+D/Q/C; asynchronous-reset DFFs additionally require R. Each connection must be
+a one-element list containing a nonnegative integer net ID or Yosys constant
+`0`, `1`, `x`, `z`; booleans and other strings are invalid. Malformed cells are
+inventoried as UNKNOWN. Every recoverable integer connection on such a cell is
+conservatively treated as possibly driven, because its port metadata cannot be
+trusted; connected data and clock paths may therefore also become UNKNOWN.
+This is not full JSON-schema validation. See [validation evidence](SCALAR_PORT_EVIDENCE.md).

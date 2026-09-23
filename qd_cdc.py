@@ -79,19 +79,24 @@ def check(data, top, input_domains=None):
         typ, conns = c.get("type", ""), c.get("connections", {})
         dirs = c.get("port_directions", {})
         if typ in FFS or typ in RESET_FFS:
-            ds, qs, cs = conns.get("D", []), conns.get("Q", []), conns.get("C", [])
-            reset_ports_valid = (typ not in RESET_FFS or
-                                 (set(conns) == {"D", "Q", "C", "R"} and
-                                  all(isinstance(bits, list) and len(bits) == 1 and
-                                      (type(bits[0]) is int and bits[0] >= 0 or
-                                       isinstance(bits[0], str) and bits[0] in {"0", "1", "x", "z"})
-                                      for bits in conns.values()) and
-                                  dirs == {"D": "input", "Q": "output", "C": "input", "R": "input"}))
-            if not reset_ports_valid or len(ds) != 1 or len(qs) != 1 or len(cs) != 1:
+            expected_dirs = {"D": "input", "Q": "output", "C": "input"}
+            if typ in RESET_FFS:
+                expected_dirs["R"] = "input"
+            ports_valid = (isinstance(conns, dict) and set(conns) == set(expected_dirs) and
+                           dirs == expected_dirs and
+                           all(isinstance(bits, list) and len(bits) == 1 and
+                               (type(bits[0]) is int and bits[0] >= 0 or
+                                isinstance(bits[0], str) and bits[0] in {"0", "1", "x", "z"})
+                               for bits in conns.values()))
+            if not ports_valid:
                 unknown_cells.append((name, typ, c.get("attributes", {}).get("src", "")))
-                for b in (qs if isinstance(qs, list) else []):
-                    unknowns[bitkey(b)].append((name, "unsupported sequential ports or width"))
+                # Invalid port metadata cannot establish which pins drive nets.
+                for bits in (conns.values() if isinstance(conns, dict) else []):
+                    for bit in (bits if isinstance(bits, list) else []):
+                        if type(bit) is int and bit >= 0:
+                            unknowns[bitkey(bit)].append((name, "unsupported sequential ports or width"))
                 continue
+            ds, qs, cs = conns["D"], conns["Q"], conns["C"]
             ff = {"name": name, "d": bitkey(ds[0]), "q": bitkey(qs[0]), "clk": bitkey(cs[0]),
                   "async": marked(c.get("attributes", {}).get("async_reg", "0")),
                   "src": c.get("attributes", {}).get("src", "")}
