@@ -65,3 +65,7 @@ No independent commercial CDC oracle, timing model, external clock declaration,
 output-domain analysis, exhaustive state coverage, generated-clock or reset
 proof is established. An evidence string is retained provenance, not verified
 truth or an approved waiver. Production qualification remains incomplete.
+
+A fresh tool checkout also passed all 21 tests and reproduced all three reports
+byte-for-byte from the same synthesized pilot netlist. This checks tool-workspace
+reproducibility; it is not independent synthesis or a second application checkout.
