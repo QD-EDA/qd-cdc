@@ -3,10 +3,12 @@
 import argparse
 import json
 import sys
-from collections import defaultdict, deque
+from collections import defaultdict
 
 
 FFS = {"$_DFF_P_", "$_DFF_N_"}
+RESET_FFS = {f"$_DFF_{clock}{reset}{value}_": (clock, reset, int(value))
+             for clock in "PN" for reset in "PN" for value in "01"}
 COMB = {"$_AND_", "$_OR_", "$_XOR_", "$_XNOR_", "$_NOT_", "$_BUF_",
         "$_MUX_", "$_NAND_", "$_NOR_", "$_AOI3_", "$_OAI3_", "$_AOI4_", "$_OAI4_"}
 
@@ -36,15 +38,28 @@ def check(data, top):
     for name, c in cells.items():
         typ, conns = c.get("type", ""), c.get("connections", {})
         dirs = c.get("port_directions", {})
-        if typ in FFS:
+        if typ in FFS or typ in RESET_FFS:
             ds, qs, cs = conns.get("D", []), conns.get("Q", []), conns.get("C", [])
-            if len(ds) != 1 or len(qs) != 1 or len(cs) != 1:
+            reset_ports_valid = (typ not in RESET_FFS or
+                                 (set(conns) == {"D", "Q", "C", "R"} and
+                                  all(isinstance(bits, list) and len(bits) == 1 and
+                                      (type(bits[0]) is int and bits[0] >= 0 or
+                                       isinstance(bits[0], str) and bits[0] in {"0", "1", "x", "z"})
+                                      for bits in conns.values()) and
+                                  dirs == {"D": "input", "Q": "output", "C": "input", "R": "input"}))
+            if not reset_ports_valid or len(ds) != 1 or len(qs) != 1 or len(cs) != 1:
                 unknown_cells.append((name, typ, c.get("attributes", {}).get("src", "")))
-                for b in qs: unknowns[bitkey(b)].append((name, "unsupported sequential width"))
+                for b in (qs if isinstance(qs, list) else []):
+                    unknowns[bitkey(b)].append((name, "unsupported sequential ports or width"))
                 continue
             ff = {"name": name, "d": bitkey(ds[0]), "q": bitkey(qs[0]), "clk": bitkey(cs[0]),
                   "async": marked(c.get("attributes", {}).get("async_reg", "0")),
                   "src": c.get("attributes", {}).get("src", "")}
+            ff["edge"] = "posedge" if typ[6] == "P" else "negedge"
+            if typ in RESET_FFS:
+                _, reset, value = RESET_FFS[typ]
+                ff["reset"] = {"bit": bitkey(conns["R"][0]), "active_level": int(reset == "P"),
+                               "value": value, "clock_edge": ff["edge"]}
             ffs[name] = ff
             drivers[ff["q"]].append((name, "Q"))
         elif typ in COMB:
@@ -91,6 +106,12 @@ def check(data, top):
                         "destination_clock": "UNKNOWN", "path": [f"unsupported cell {typ}"],
                         "classification": "UNKNOWN", "source": src})
     for dst in ffs.values():
+        if "reset" in dst:
+            reports.append({"top": top, "source_cell": "UNKNOWN", "source_clock": "UNKNOWN",
+                            "destination_cell": dst["name"], "destination_clock": dst["clk"],
+                            "path": [f"{dst['name']}.R={dst['reset']['bit']}",
+                                     "reset assertion/deassertion relationship unverified"],
+                            "classification": "UNKNOWN", "source": dst["src"]})
         if dst["clk"] not in inputs or drivers.get(dst["clk"]):
             reports.append({"top": top, "source_cell": "UNKNOWN", "source_clock": "UNKNOWN", "destination_cell": dst["name"],
                             "destination_clock": dst["clk"], "path": ["gated/derived or unresolved clock"],
@@ -104,10 +125,18 @@ def check(data, top):
                 continue
             else:
                 following = second_stage.get(dst["q"])
-                candidate = following and following["clk"] == dst["clk"] and dst["async"] and following["async"]
+                candidate = (following and following["clk"] == dst["clk"] and
+                             following["edge"] == dst["edge"] and
+                             following.get("reset") == dst.get("reset") and
+                             dst["async"] and following["async"])
                 reports.append({"top": top, "source_cell": src["name"], "source_clock": src["clk"], "destination_cell": dst["name"],
                                 "destination_clock": dst["clk"], "path": list(path),
                                 "classification": "CANDIDATE_SYNCHRONIZER" if candidate else "CROSSING", "source": dst["src"] or src["src"]})
+    for report in reports:
+        for role in ("source", "destination"):
+            endpoint = ffs.get(report[f"{role}_cell"], {})
+            if "reset" in endpoint:
+                report[f"{role}_reset"] = endpoint["reset"]
     reports.sort(key=lambda r: (r["destination_cell"], r["source_cell"], r["classification"], r["path"]))
     return reports
 

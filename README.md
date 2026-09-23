@@ -22,7 +22,23 @@ The example reports a `CROSSING` from `clk_a` to `clk_b`. Input is a Yosys `writ
 
 Exit codes: `0` means there are no findings; `1` means any finding was reported, including `CROSSING`, `UNKNOWN`, or `CANDIDATE_SYNCHRONIZER`; `2` means invalid JSON/input or a missing top. Unsupported cells that affect a traced path are `UNKNOWN`, so they also produce exit `1`.
 
-Only single-bit `$_DFF_P_` and `$_DFF_N_` and the combinational cells `$_AND_`, `$_OR_`, `$_XOR_`, `$_XNOR_`, `$_NOT_`, `$_BUF_`, `$_MUX_`, `$_NAND_`, `$_NOR_`, `$_AOI3_`, `$_OAI3_`, `$_AOI4_`, and `$_OAI4_` are traced. Generic `$dff`, latches, memories, black boxes, other sequential/combinational cells, multi-bit flops, and unresolved, gated, or derived clocks can produce `UNKNOWN`. Clock pins must be driven directly by top-level inputs. Related/generated clocks are treated as unrelated. There is no clock map, waiver system, timing analysis, or signoff claim.
+Supported cells include single-bit `$_DFF_P_` and `$_DFF_N_`, the asynchronous-reset types below, and the combinational cells `$_AND_`, `$_OR_`, `$_XOR_`, `$_XNOR_`, `$_NOT_`, `$_BUF_`, `$_MUX_`, `$_NAND_`, `$_NOR_`, `$_AOI3_`, `$_OAI3_`, `$_AOI4_`, and `$_OAI4_` are traced. Generic `$dff`, latches, memories, black boxes, other sequential/combinational cells, multi-bit flops, and unresolved, gated, or derived clocks can produce `UNKNOWN`. Clock pins must be driven directly by top-level inputs. Related/generated clocks are treated as unrelated. There is no clock map, waiver system, timing analysis, or signoff claim.
+
+### Asynchronous-reset DFF mapping
+
+Data paths now also trace all eight single-bit Yosys `$_DFF_[PN][PN][01]_`
+types. The three characters encode clock edge, active reset level and reset
+value. These cells require exactly scalar D/Q/C/R connections with declared
+input/output directions; malformed mappings remain UNKNOWN.
+
+Every mapped reset endpoint emits an UNKNOWN finding: assertion/deassertion
+relationships, reset-domain crossings and release timing are not verified yet.
+JSON findings carry `source_reset` / `destination_reset` when applicable, with
+bit, active level, reset value and clock edge. Constants do not waive this check.
+Candidate chains additionally require equal destination-stage clock edges and
+reset mappings; annotations still provide no proof. Other reset/enable/latch
+families remain unsupported. [Pilot evidence](ASYNC_RESET_EVIDENCE.md) documents
+the real Caliptra mapping and its remaining unknowns.
 
 Licensed under Apache-2.0; see [LICENSE](LICENSE).
 
