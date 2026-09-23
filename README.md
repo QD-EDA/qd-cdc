@@ -129,3 +129,17 @@ python3 run_opentitan_reqack_pilot.py /path/to/clean/opentitan /tmp/new-reqack-e
 It requires Yosys with `read_slang`, the documented OpenTitan pin, and simple paths
 without spaces/metacharacters. It returns 2 (UNKNOWN) after collecting structural
 evidence, or 1 on an unmet required check. See [pilot evidence](OPENTITAN_REQACK_EVIDENCE.md).
+
+## Combinational mappings and constant identity
+
+All 13 supported scalar gate types require their exact Yosys input pins and Y
+output, scalar connection lists and matching directions. A malformed gate is
+inventoried as UNKNOWN; every recoverable connected net is conservatively
+possibly driven, just as for malformed DFFs. This prevents incorrect input
+metadata from pruning a crossing and producing a false-clean report.
+
+Integer net IDs and string constants remain distinct. In diagnostic bit references,
+constants are quoted (`'0'`, `'1'`, `'x'`, `'z'`), while integer IDs remain decimal
+strings. New `source_reset_bit` / `destination_reset_bit` fields preserve that
+distinction; the existing nested reset `bit` value retains its legacy format.
+Constants do not prove clock or reset safety. See [mapping evidence](COMBINATIONAL_PORT_EVIDENCE.md).
