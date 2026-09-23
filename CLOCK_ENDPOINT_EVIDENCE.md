@@ -71,3 +71,10 @@ implemented. Unknown clock endpoints block this classification; they do not
 resolve the underlying relationship. Multiple data drivers, combinational schema
 validation and scalable complete path enumeration remain separate qualification
 work. The full CDC roadmap remains active.
+
+A fresh local clone of `5421d88` independently synthesized all three configurations
+and produced byte-identical checker reports; all 26 Python tests also passed there.
+This repeats the workspace, not the installed toolchain. Initial CLI runs took
+0.0251, 0.0248 and 0.0267 seconds for modes 0–2 respectively, including startup;
+peak RSS was not measured. These tiny cases do not establish the roadmap's scale
+target.
