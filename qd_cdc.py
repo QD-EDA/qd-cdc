@@ -118,6 +118,9 @@ def check(data, top, input_domains=None):
             unknown_cells.append((name, typ, c.get("attributes", {}).get("src", "")))
             for bits in conns.values():
                 for b in bits: unknowns[bitkey(b)].append((name, f"unsupported cell with unknown ports {typ}"))
+    def clock_resolved(bit):
+        return bit in inputs and not drivers.get(bit) and not unknowns.get(bit)
+
     # Trace each D through supported combinational fan-in. Each path retains the
     # cell trail so a black box or unsupported primitive cannot disappear.
     def sources(bit, trail=(), seen=frozenset()):
@@ -162,12 +165,19 @@ def check(data, top, input_domains=None):
                             "path": [f"{dst['name']}.R={dst['reset']['bit']}",
                                      "reset assertion/deassertion relationship unverified"],
                             "classification": "UNKNOWN", "source": dst["src"]})
-        if dst["clk"] not in inputs or drivers.get(dst["clk"]):
+        if not clock_resolved(dst["clk"]):
             reports.append({"top": top, "source_cell": "UNKNOWN", "source_clock": "UNKNOWN", "destination_cell": dst["name"],
                             "destination_clock": dst["clk"], "path": ["gated/derived or unresolved clock"],
                             "classification": "UNKNOWN", "source": dst["src"]})
             continue
         for src, path, unknown in sources(dst["d"]):
+            if src and not unknown and not clock_resolved(src['clk']):
+                unknown = True
+                path += ('source clock unresolved',)
+            if (src and not unknown and src['clk'] == dst['clk'] and
+                    'edge' in src and src['edge'] != dst['edge']):
+                unknown = True
+                path += ('same-net opposite-edge timing unverified',)
             if unknown:
                 reports.append({"top": top, "source_cell": src['name'] if src else "UNKNOWN", "source_clock": "UNKNOWN", "destination_cell": dst["name"],
                                 "destination_clock": dst["clk"], "path": list(path), "classification": "UNKNOWN", "source": dst["src"]})
@@ -190,6 +200,9 @@ def check(data, top, input_domains=None):
             if role == 'source' and 'source_ports' in report:
                 continue
             endpoint = ffs.get(report[f"{role}_cell"], {})
+            if endpoint:
+                report[f"{role}_clock_bit"] = endpoint['clk']
+                report[f"{role}_clock_edge"] = endpoint['edge']
             if "reset" in endpoint:
                 report[f"{role}_reset"] = endpoint["reset"]
     reports.sort(key=lambda r: (r["destination_cell"], r["source_cell"], r["classification"], r["path"]))
