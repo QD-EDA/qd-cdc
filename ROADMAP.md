@@ -1,5 +1,19 @@
 # QD-CDC: explainable clock and reset analysis
 
+## Full product destination
+
+QD-CDC is intended to become a full CDC tool suitable for replacing commercial
+CDC analysis in explicitly qualified flows. The current structural prototype
+and initial single-bit qualification scope are milestones, not the product
+ceiling. Required capabilities include clock/reset discovery and constraints,
+generated/gated clocks, synchronizer and handshake recognition, multibit data
+and asynchronous FIFO analysis, reconvergence, reset interactions, structural
+and formal protocol checks, hierarchical/IP models, scalable full-chip analysis,
+source-linked debug and evidence-backed waiver management. Each capability must
+have a published support/qualification matrix; initial qualification does not
+complete this full-tool goal. VC SpyGlass CDC is a capability benchmark, not a
+claim of current equivalence or access to its proprietary implementation.
+
 ## Current capability
 
 Baseline `024e784b4e04f3587f8de2761e129427b94bdf2e`: six Python tests;
