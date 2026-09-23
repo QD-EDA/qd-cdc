@@ -75,3 +75,14 @@ distinct from string-valued constants internally, including candidate reset
 identity; preserve existing reset metadata and add unambiguous reset-bit fields.
 Require positive coverage of every gate input, malformed mappings, literal/net
 collisions, unchanged real-design classifications and an independent pin oracle.
+
+## Iterative traversal and incomplete analysis
+
+Replace recursion with explicit depth-first traversal, preserving path and
+ambiguity semantics. Bound global visited-net and emitted-path-label work with
+a positive integer CLI/API option. Stop a destination when its next operation
+cannot fit; report UNKNOWN with an explicit incomplete-analysis marker and
+unknown remaining path count. Sort traversal inputs so partial findings are
+independent of cell/connection insertion order. Preserve complete reports below
+the budget. Test deep chains, reconvergence, cycles, ambiguity, exact boundaries
+and CLI failure behavior. This does not qualify full-chip scale or CDC safety.

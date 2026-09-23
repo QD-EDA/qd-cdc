@@ -143,3 +143,14 @@ constants are quoted (`'0'`, `'1'`, `'x'`, `'z'`), while integer IDs remain deci
 strings. New `source_reset_bit` / `destination_reset_bit` fields preserve that
 distinction; the existing nested reset `bit` value retains its legacy format.
 Constants do not prove clock or reset safety. See [mapping evidence](COMBINATIONAL_PORT_EVIDENCE.md).
+
+## Bounded traversal
+
+Fan-in traversal is iterative. `--max-traversal-work N` sets a positive global
+budget (default 1,000,000): one unit per visited net and per emitted path label.
+If the next operation cannot fit, that destination gets an UNKNOWN finding with
+`analysis_incomplete: true` and `max_traversal_work`; previously enumerated
+findings remain visible. Unexamined path counts are unknown, not zero. Exit 1
+prevents an incomplete traversal from appearing clean. Invalid budgets exit 2.
+This is not a wall-time or total-memory cap: loading, inventory, sorting and
+metadata are outside this budget. See [traversal evidence](TRAVERSAL_EVIDENCE.md).

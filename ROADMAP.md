@@ -66,8 +66,10 @@ findings is not evidence that all crossings were examined.
   `621d943ac-dirty`, but qualify an immutable clean Yosys build before release;
   pin the chosen SV frontend and independent engine. Test every mapped cell type.
 - Targets: 100k mapped flops/1M combinational cells within 60 s and 4 GiB;
-  diagnostic caps must retain total counts and explicit truncation. The current
-  recursive path enumeration has no such demonstrated scale.
+  diagnostic caps must retain known counts and explicit incompleteness, with
+  unexamined counts reported as unknown. Iterative traversal now bounds visited
+  nets and emitted path labels; the full target scale remains undemonstrated.
+  See [bounded traversal evidence](TRAVERSAL_EVIDENCE.md).
 - Release: no missed planted crossing/reset fault; 100% of state inventory
   accounted for as analyzed or UNKNOWN; stable source traces; two repeat runs;
   all disagreements reviewed. Timeout or incomplete enumeration cannot pass.
