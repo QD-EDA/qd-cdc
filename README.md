@@ -86,3 +86,13 @@ an assertion of asynchronous CDC. Findings include mapped endpoint clock bits
 and edges. Input-domain declarations still do not specify launch edges.
 See [clock endpoint evidence](CLOCK_ENDPOINT_EVIDENCE.md) for the Caliptra pilot
 and supported limits.
+
+## Ambiguous connectivity
+
+Data nets with multiple supported/unsupported drivers remain UNKNOWN for every
+traced driver path, including same-clock sources. This also applies when a
+primary input has an internal driver, even in legacy mode. Candidate synchronizer
+hints require one mapped-flop second-stage consumer and an unambiguous first-stage
+Q driver. This does not prove arbitrary fanout or reconvergence safe. See
+[ambiguity evidence](AMBIGUOUS_PATH_EVIDENCE.md) for the independent Yosys negative
+fixture and preserved Caliptra results.
