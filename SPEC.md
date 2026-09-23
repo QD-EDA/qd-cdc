@@ -46,3 +46,12 @@ or candidate labels. Conflicting internal drivers on primary-input nets must be
 visible even in legacy mode. Candidate hints require one mapped-flop D consumer
 and an unambiguous first-stage Q driver; cell ordering must not change results.
 Preserve ordinary single-driver and existing Caliptra pilot behavior.
+
+## Scalar DFF mapping validation
+
+Apply the existing scalar port/direction/bit validation to resetless as well as
+resettable supported DFFs. Reject malformed port containers without crashing.
+Do not assign clock/data semantics or candidate hints to malformed mappings;
+inventory them as UNKNOWN and conservatively propagate uncertainty onto every
+recoverable connected net. Preserve reports for valid netlists and Caliptra
+pilots. Full module/combinational schema validation remains separate work.
