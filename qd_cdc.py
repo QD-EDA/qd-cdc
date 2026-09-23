@@ -24,12 +24,52 @@ def marked(value):
     except ValueError: return False
 
 
-def check(data, top):
+def input_domain_sources(ports, domains):
+    """Resolve explicit port assumptions to net bits, retaining all aliases."""
+    if not isinstance(domains, dict):
+        raise ValueError('input domains must be an object')
+    if not isinstance(ports, dict) or any(not isinstance(p, dict) for p in ports.values()):
+        raise ValueError('input-domain audit requires port objects')
+    aliases, bindings = defaultdict(list), defaultdict(list)
+    for name, port in sorted(ports.items()):
+        if port.get('direction') != 'input':
+            continue
+        bits = port.get('bits')
+        if not isinstance(bits, list) or not bits or any(type(b) is not int or b < 0 for b in bits):
+            raise ValueError(f'{name}: input-domain audit requires input net bits')
+        for offset, bit in enumerate(bits):
+            aliases[bitkey(bit)].append({'port': name, 'offset': offset})
+    for name, spec in sorted(domains.items()):
+        port = ports.get(name, {})
+        if port.get('direction') != 'input':
+            raise ValueError(f'{name}: domain target must be an input port')
+        if (not isinstance(spec, dict) or set(spec) != {'clock', 'evidence'} or
+                any(not isinstance(spec[k], str) or not spec[k].strip() for k in spec)):
+            raise ValueError(f'{name}: domain requires clock and nonempty evidence strings')
+        clock = ports.get(spec['clock'], {})
+        if clock.get('direction') != 'input' or len(clock.get('bits', [])) != 1:
+            raise ValueError(f'{name}: clock must name a scalar input port')
+        clock_bit = bitkey(clock['bits'][0])
+        for bit in port['bits']:
+            bindings[bitkey(bit)].append((clock_bit, dict(port=name, **spec)))
+    result = {}
+    for bit, names in aliases.items():
+        clocks = {clock for clock, _ in bindings[bit]}
+        if len(clocks) > 1:
+            raise ValueError(f'conflicting input-domain assumptions for net {bit}')
+        result[bit] = {'name': 'PRIMARY_INPUT', 'clk': next(iter(clocks), 'UNKNOWN'), 'src': '',
+                       'source_ports': names, 'source_bit': bit,
+                       'input_domain_assumptions': [spec for _, spec in bindings[bit]]}
+    return result
+
+
+def check(data, top, input_domains=None):
     modules = data.get("modules", {})
     if top not in modules:
         raise ValueError(f"top module {top!r} not found")
     mod = modules[top]
     cells = mod.get("cells", {})
+    primary = input_domain_sources(mod.get('ports', {}), input_domains) if input_domains is not None else None
     drivers, unknowns, ffs, inputs = defaultdict(list), defaultdict(list), {}, set()
     unknown_cells = []
     for name, p in mod.get("ports", {}).items():
@@ -82,7 +122,17 @@ def check(data, top):
     # cell trail so a black box or unsupported primitive cannot disappear.
     def sources(bit, trail=(), seen=frozenset()):
         if bit in seen: return [(None, trail + ("combinational loop",), True)]
-        if bit in inputs: return [(None, trail + ("PRIMARY_INPUT",), False)]
+        if bit in inputs:
+            if primary is None:
+                return [(None, trail + ("PRIMARY_INPUT",), False)]
+            src = primary[bit]
+            ambiguous = drivers.get(bit) or unknowns.get(bit)
+            clock_unresolved = drivers.get(src['clk']) or unknowns.get(src['clk'])
+            reason = ('input net also has internal driver' if ambiguous else
+                      'input-domain clock has internal driver' if clock_unresolved else
+                      'input domain undeclared' if src['clk'] == 'UNKNOWN' else 'declared input domain')
+            return [(src, trail + (f"PRIMARY_INPUT net {bit}: {reason}",),
+                     bool(ambiguous or clock_unresolved or src['clk'] == 'UNKNOWN'))]
         found = []
         for cell, port in drivers.get(bit, []):
             if cell in ffs:
@@ -119,7 +169,7 @@ def check(data, top):
             continue
         for src, path, unknown in sources(dst["d"]):
             if unknown:
-                reports.append({"top": top, "source_cell": "UNKNOWN", "source_clock": "UNKNOWN", "destination_cell": dst["name"],
+                reports.append({"top": top, "source_cell": src['name'] if src else "UNKNOWN", "source_clock": "UNKNOWN", "destination_cell": dst["name"],
                                 "destination_clock": dst["clk"], "path": list(path), "classification": "UNKNOWN", "source": dst["src"]})
             elif src is None or src["clk"] == dst["clk"]:
                 continue
@@ -132,8 +182,13 @@ def check(data, top):
                 reports.append({"top": top, "source_cell": src["name"], "source_clock": src["clk"], "destination_cell": dst["name"],
                                 "destination_clock": dst["clk"], "path": list(path),
                                 "classification": "CANDIDATE_SYNCHRONIZER" if candidate else "CROSSING", "source": dst["src"] or src["src"]})
+            if src and 'source_ports' in src:
+                reports[-1].update({key: src[key] for key in
+                                   ('source_ports', 'source_bit', 'input_domain_assumptions')})
     for report in reports:
         for role in ("source", "destination"):
+            if role == 'source' and 'source_ports' in report:
+                continue
             endpoint = ffs.get(report[f"{role}_cell"], {})
             if "reset" in endpoint:
                 report[f"{role}_reset"] = endpoint["reset"]
@@ -148,15 +203,26 @@ def main(argv=None):
     c.add_argument("netlist")
     c.add_argument("--top", required=True)
     c.add_argument("--json", action="store_true")
+    c.add_argument('--input-domains', help='JSON port-to-clock assumptions; {} audits all inputs as undeclared')
     a = p.parse_args(argv)
     try:
-        with open(a.netlist) as f: reports = check(json.load(f), a.top)
+        domains = None
+        if a.input_domains:
+            with open(a.input_domains) as f: domains = json.load(f)
+            if not isinstance(domains, dict):
+                raise ValueError('input domains must be an object')
+        with open(a.netlist) as f: reports = check(json.load(f), a.top, input_domains=domains)
     except (OSError, json.JSONDecodeError, ValueError) as e:
         print(f"qd-cdc: {e}", file=sys.stderr)
         return 2
     if a.json:
-        print(json.dumps(reports, indent=2, sort_keys=True))
+        output = reports if domains is None else {
+            'schema_version': 1, 'input_domains': domains, 'findings': reports,
+            'scope': 'input-domain structural audit; not CDC safety proof'}
+        print(json.dumps(output, indent=2, sort_keys=True))
     else:
+        if domains is not None:
+            print('Input-domain assumptions (unverified): ' + json.dumps(domains, sort_keys=True))
         for r in reports:
             print(f"{r['classification']}: {r['top']} {r['source_cell']}@{r['source_clock']} -> {r['destination_cell']}@{r['destination_clock']} path={' -> '.join(r['path'])} source={r['source'] or 'unknown'}")
     return 1 if reports else 0

@@ -44,3 +44,34 @@ Licensed under Apache-2.0; see [LICENSE](LICENSE).
 
 See [the staged qualification roadmap](ROADMAP.md) for named pilots, unsupported
 cases, independent oracles, performance targets and release gates.
+
+## Primary-input domain audit
+
+Legacy mode omits primary-input data paths from findings. Use
+`--input-domains domains.json` to include them. An empty object `{}` leaves every
+primary-input data path UNKNOWN. A declaration assigns a whole input port to a
+scalar top-level clock input and must include a nonempty evidence description:
+
+```json
+{"din": {"clock": "clk_a", "evidence": "Integration contract reference; unverified assumption"}}
+```
+
+The clock association is an assumption, not checked timing or a reviewed waiver.
+Same-clock associations produce no crossing finding; differing clocks produce
+CROSSING or the existing annotation-only candidate hint. Unmapped inputs and
+internally driven input/clock nets stay UNKNOWN. Conflicting aliases, absent
+ports, nonscalar clocks and malformed declarations fail with exit 2. Vector
+ports share one declared domain; reported offsets are positions in the Yosys
+bit array, not necessarily HDL subscripts. All aliases remain visible.
+
+With this option, JSON is an object containing `schema_version`, `scope`,
+`input_domains`, and `findings`, so assumptions survive even a zero-finding run.
+Input findings include `source_ports`, `source_bit`, and
+`input_domain_assumptions`. Text output also prints the declarations. Exit codes
+remain 0/1/2; zero means no findings within this bounded audit, not CDC safety.
+Without the option, the existing JSON array and behavior are unchanged.
+
+This covers top-level input fan-in of supported DFFs, not output timing, inout
+boundaries, external clocks absent from the top, generated-clock relationships,
+per-bit domain specifications, edge relationships or full design coverage.
+See [input-domain evidence](INPUT_DOMAIN_EVIDENCE.md).
