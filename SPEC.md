@@ -55,3 +55,13 @@ Do not assign clock/data semantics or candidate hints to malformed mappings;
 inventory them as UNKNOWN and conservatively propagate uncertainty onto every
 recoverable connected net. Preserve reports for valid netlists and Caliptra
 pilots. Full module/combinational schema validation remains separate work.
+
+## Endpoint traceability and OpenTitan request/acknowledge pilot
+
+Preserve both mapped flop source annotations and all aliases of launch Q and
+capture D in JSON. Keep original locations verbatim, record vector alias positions,
+sort aliases deterministically, and represent missing metadata explicitly. Reject
+malformed alias metadata. Do not change classifications or treat names as proof.
+Exercise both pinned generic OpenTitan handshake modes using unchanged sources;
+retain synthesis failures and reset/protocol uncertainty. Compare crossing
+endpoints with the source-level request and acknowledgement paths.
