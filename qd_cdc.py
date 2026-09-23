@@ -29,6 +29,7 @@ def check(data, top):
     mod = modules[top]
     cells = mod.get("cells", {})
     drivers, unknowns, ffs, inputs = defaultdict(list), defaultdict(list), {}, set()
+    unknown_cells = []
     for name, p in mod.get("ports", {}).items():
         if p.get("direction") == "input":
             inputs.update(map(bitkey, p.get("bits", [])))
@@ -38,6 +39,7 @@ def check(data, top):
         if typ in FFS:
             ds, qs, cs = conns.get("D", []), conns.get("Q", []), conns.get("C", [])
             if len(ds) != 1 or len(qs) != 1 or len(cs) != 1:
+                unknown_cells.append((name, typ, c.get("attributes", {}).get("src", "")))
                 for b in qs: unknowns[bitkey(b)].append((name, "unsupported sequential width"))
                 continue
             ff = {"name": name, "d": bitkey(ds[0]), "q": bitkey(qs[0]), "clk": bitkey(cs[0]),
@@ -50,12 +52,15 @@ def check(data, top):
                 if dirs.get(port) == "output":
                     for b in bits: drivers[bitkey(b)].append((name, port))
         elif typ.startswith("$") and "mem" in typ.lower():
+            unknown_cells.append((name, typ, c.get("attributes", {}).get("src", "")))
             for b in conns.get("RD_DATA", []): unknowns[bitkey(b)].append((name, "memory cell"))
         elif any(d == "output" for d in dirs.values()):
+            unknown_cells.append((name, typ, c.get("attributes", {}).get("src", "")))
             for port, bits in conns.items():
                 if dirs.get(port) == "output":
                     for b in bits: unknowns[bitkey(b)].append((name, f"unsupported cell {typ}"))
         else:
+            unknown_cells.append((name, typ, c.get("attributes", {}).get("src", "")))
             for bits in conns.values():
                 for b in bits: unknowns[bitkey(b)].append((name, f"unsupported cell with unknown ports {typ}"))
     # Trace each D through supported combinational fan-in. Each path retains the
@@ -81,6 +86,10 @@ def check(data, top):
     # and a direct Q-to-D stage connection.
     second_stage = {f["d"]: f for f in ffs.values() if f["async"]}
     reports = []
+    for name, typ, src in unknown_cells:
+        reports.append({"top": top, "source_cell": name, "source_clock": "UNKNOWN", "destination_cell": name,
+                        "destination_clock": "UNKNOWN", "path": [f"unsupported cell {typ}"],
+                        "classification": "UNKNOWN", "source": src})
     for dst in ffs.values():
         if dst["clk"] not in inputs or drivers.get(dst["clk"]):
             reports.append({"top": top, "source_cell": "UNKNOWN", "source_clock": "UNKNOWN", "destination_cell": dst["name"],

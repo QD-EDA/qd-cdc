@@ -56,6 +56,16 @@ class CDCTest(unittest.TestCase):
             json.dump(net(cells), f); f.flush()
             self.assertEqual(main(["check", f.name, "--top", "missing"]), 2)
 
+    def test_standalone_unsupported_sequential_cell_is_unknown(self):
+        cells = {"gated_ff": {"type": "$_DFFE_PP_", "connections": {"D": [1], "Q": [2], "C": [10], "E": [3]},
+                              "port_directions": {"D": "input", "Q": "output", "C": "input", "E": "input"}}}
+        report = check(net(cells), "top")
+        self.assertEqual(len(report), 1)
+        self.assertEqual(report[0]["classification"], "UNKNOWN")
+        with tempfile.NamedTemporaryFile("w", suffix=".json") as f:
+            json.dump(net(cells), f); f.flush()
+            self.assertEqual(main(["check", f.name, "--top", "top"]), 1)
+
 
 if __name__ == "__main__":
     unittest.main()
