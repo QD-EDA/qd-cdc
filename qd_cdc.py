@@ -9,12 +9,15 @@ from collections import defaultdict
 FFS = {"$_DFF_P_", "$_DFF_N_"}
 RESET_FFS = {f"$_DFF_{clock}{reset}{value}_": (clock, reset, int(value))
              for clock in "PN" for reset in "PN" for value in "01"}
-COMB = {"$_AND_", "$_OR_", "$_XOR_", "$_XNOR_", "$_NOT_", "$_BUF_",
-        "$_MUX_", "$_NAND_", "$_NOR_", "$_AOI3_", "$_OAI3_", "$_AOI4_", "$_OAI4_"}
+COMB = {"$_BUF_": "A", "$_NOT_": "A", "$_AND_": "AB", "$_OR_": "AB",
+        "$_XOR_": "AB", "$_XNOR_": "AB", "$_NAND_": "AB", "$_NOR_": "AB",
+        "$_MUX_": "ABS", "$_AOI3_": "ABC", "$_OAI3_": "ABC",
+        "$_AOI4_": "ABCD", "$_OAI4_": "ABCD"}
 
 
 def bitkey(bit):
-    return str(bit)
+    # Yosys JSON distinguishes integer net IDs from string-valued constants.
+    return f"'{bit}'" if isinstance(bit, str) else str(bit)
 
 
 def marked(value):
@@ -93,10 +96,14 @@ def check(data, top, input_domains=None):
     for name, c in cells.items():
         typ, conns = c.get("type", ""), c.get("connections", {})
         dirs = c.get("port_directions", {})
-        if typ in FFS or typ in RESET_FFS:
+        expected_dirs = None
+        if typ in COMB:
+            expected_dirs = {**{p: "input" for p in COMB[typ]}, "Y": "output"}
+        elif typ in FFS or typ in RESET_FFS:
             expected_dirs = {"D": "input", "Q": "output", "C": "input"}
             if typ in RESET_FFS:
                 expected_dirs["R"] = "input"
+        if expected_dirs is not None:
             ports_valid = (isinstance(conns, dict) and set(conns) == set(expected_dirs) and
                            dirs == expected_dirs and
                            all(isinstance(bits, list) and len(bits) == 1 and
@@ -109,8 +116,10 @@ def check(data, top, input_domains=None):
                 for bits in (conns.values() if isinstance(conns, dict) else []):
                     for bit in (bits if isinstance(bits, list) else []):
                         if type(bit) is int and bit >= 0:
-                            unknowns[bitkey(bit)].append((name, "unsupported sequential ports or width"))
+                            kind = "combinational" if typ in COMB else "sequential"
+                            unknowns[bitkey(bit)].append((name, f"unsupported {kind} ports or width"))
                 continue
+        if typ in FFS or typ in RESET_FFS:
             ds, qs, cs = conns["D"], conns["Q"], conns["C"]
             ff = {"name": name, "d": bitkey(ds[0]), "q": bitkey(qs[0]), "clk": bitkey(cs[0]),
                   "async": marked(c.get("attributes", {}).get("async_reg", "0")),
@@ -118,7 +127,8 @@ def check(data, top, input_domains=None):
             ff["edge"] = "posedge" if typ[6] == "P" else "negedge"
             if typ in RESET_FFS:
                 _, reset, value = RESET_FFS[typ]
-                ff["reset"] = {"bit": bitkey(conns["R"][0]), "active_level": int(reset == "P"),
+                ff["reset_bit"] = bitkey(conns["R"][0])
+                ff["reset"] = {"bit": str(conns["R"][0]), "active_level": int(reset == "P"),
                                "value": value, "clock_edge": ff["edge"]}
             ffs[name] = ff
             drivers[ff["q"]].append((name, "Q"))
@@ -218,6 +228,7 @@ def check(data, top, input_domains=None):
                              following["clk"] == dst["clk"] and
                              following["edge"] == dst["edge"] and
                              following.get("reset") == dst.get("reset") and
+                             following.get("reset_bit") == dst.get("reset_bit") and
                              dst["async"] and following["async"])
                 reports.append({"top": top, "source_cell": src["name"], "source_clock": src["clk"], "destination_cell": dst["name"],
                                 "destination_clock": dst["clk"], "path": list(path),
@@ -238,6 +249,7 @@ def check(data, top, input_domains=None):
                 report[f"{role}_clock_edge"] = endpoint['edge']
             if "reset" in endpoint:
                 report[f"{role}_reset"] = endpoint["reset"]
+                report[f"{role}_reset_bit"] = endpoint["reset_bit"]
     reports.sort(key=lambda r: (r["destination_cell"], r["source_cell"], r["classification"], r["path"]))
     return reports
 

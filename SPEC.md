@@ -65,3 +65,13 @@ malformed alias metadata. Do not change classifications or treat names as proof.
 Exercise both pinned generic OpenTitan handshake modes using unchanged sources;
 retain synthesis failures and reset/protocol uncertainty. Compare crossing
 endpoints with the source-level request and acknowledgement paths.
+
+## Scalar gate mapping integrity
+
+Validate exact ports, scalar widths, bit types and directions for every supported
+combinational primitive before traversing its inputs. Reuse the mapped-DFF
+validation path and conservative UNKNOWN propagation. Keep integer net IDs
+distinct from string-valued constants internally, including candidate reset
+identity; preserve existing reset metadata and add unambiguous reset-bit fields.
+Require positive coverage of every gate input, malformed mappings, literal/net
+collisions, unchanged real-design classifications and an independent pin oracle.
