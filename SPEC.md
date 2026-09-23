@@ -7,3 +7,14 @@ CLI: `qd-cdc check netlist.json --top TOP [--json]`. Read Yosys `write_json` mod
 Diagnostics must include top, source/destination cell and clock, path, classification, source file/line if present, and a deterministic exit code. Optional JSON output. Treat related generated clocks as unrelated unless an explicit user map is supplied and documented. No implicit waivers and no parser that silently drops cells.
 
 Tests: direct crossing flagged; same-clock path not flagged; two-flop annotated candidate; unannotated two-flop still flagged; combinational crossing; unknown/blackbox path preserved as UNKNOWN; reproducible JSON ordering. Use Python standard library. If feasible, add one tiny Verilog fixture and invoke installed Yosys to generate a real JSON input, but keep pure JSON tests so the repo works without Yosys. Add README with exact supported Yosys cell types, limits, Apache-2.0 license, and local test command. Do not edit Caliptra or Icarus sources. Do not commit/push/create remote; coordinator handles publication.
+
+## Asynchronous-reset mapping slice
+
+Support scalar Yosys `$_DFF_[PN][PN][01]_` data traversal using documented cell
+semantics, validating D/Q/C/R ports first. Inventory each mapped reset endpoint
+as an UNKNOWN relationship, with bit/polarity/value/clock-edge metadata. Do not
+infer safe reset release, CDC safety or waivers from mapping or async_reg. Require
+matching clock edges and reset mappings for the existing candidate-chain hint.
+Preserve CLI/report-list structure and original passing tests. Validate all eight
+types, malformed mappings, constants, generated clocks and candidate boundaries;
+pilot the unmodified pinned Caliptra WIDTH=1/RST_VAL=0 synchronizer in a QD harness.
