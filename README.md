@@ -100,6 +100,19 @@ The two `$_AND_` inputs are symmetric: this trace does not identify a clock
 master or gate control, validate glitch freedom, or change any CDC classification.
 See [one-hop pilot evidence](CLOCK_ORIGIN_EVIDENCE.md).
 
+## Two-stage synchronizer structure
+
+Crossing and candidate findings include `synchronizer_structure`. It lists the
+first mapped flop, a direct second mapped flop when unique, and every raw
+consumer of the first Q (including a top-level output). `two_stage_structure`
+requires that Q have one unambiguous driver, exactly one consumer at the second
+flop D, and equal clock net, edge, and reset mapping. Otherwise its status and
+reason are `UNKNOWN`. Locations come from Yosys `src`; missing locations remain
+empty. Its `safety` is always `UNKNOWN`: structure does not prove metastability
+containment, reset release, request/acknowledge protocol, or waiver eligibility.
+The existing `CROSSING`/`CANDIDATE_SYNCHRONIZER` labels and exits are unchanged.
+See [the pinned OpenTitan evidence](SYNCHRONIZER_STRUCTURE_EVIDENCE.md).
+
 ## Ambiguous connectivity
 
 Data nets with multiple supported/unsupported drivers remain UNKNOWN for every
