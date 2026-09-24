@@ -14,6 +14,35 @@ def reset_ff(d, q, clk, kind="PN0"):
 
 
 class AsyncResetTest(unittest.TestCase):
+    def test_reset_origin_names_direct_input_aliases(self):
+        cells = {'dst': reset_ff(1, 2, 10)}
+        ports = {'clk': {'direction': 'input', 'bits': [10]},
+                 'rst_src_ni': {'direction': 'input', 'bits': [20]},
+                 'reset_alias': {'direction': 'input', 'bits': [20]}}
+        row = next(r for r in check(net(cells, ports), 'top') if 'destination_reset' in r)
+        self.assertEqual(row['destination_reset_origin'], 'direct_primary_input')
+        self.assertEqual(row['destination_reset_input_ports'], [
+            {'port': 'reset_alias', 'offset': 0}, {'port': 'rst_src_ni', 'offset': 0}])
+        self.assertEqual(row['classification'], 'UNKNOWN')
+
+    def test_reset_input_with_internal_driver_remains_unknown(self):
+        cells = {'dst': reset_ff(1, 2, 10),
+                 'gate': {'type': '$_BUF_', 'connections': {'A': [30], 'Y': [20]},
+                          'port_directions': {'A': 'input', 'Y': 'output'}}}
+        ports = {'clk': {'direction': 'input', 'bits': [10]},
+                 'rst_src_ni': {'direction': 'input', 'bits': [20]}}
+        row = next(r for r in check(net(cells, ports), 'top') if 'destination_reset' in r)
+        self.assertEqual(row['destination_reset_origin'], 'UNKNOWN')
+        self.assertEqual(row['destination_reset_input_ports'], [{'port': 'rst_src_ni', 'offset': 0}])
+
+    def test_constant_reset_has_no_input_origin(self):
+        cells = {'dst': reset_ff(1, 2, 10)}
+        cells['dst']['connections']['R'] = ['0']
+        ports = {'clk': {'direction': 'input', 'bits': [10]}}
+        row = next(r for r in check(net(cells, ports), 'top') if 'destination_reset' in r)
+        self.assertEqual(row['destination_reset_origin'], 'UNKNOWN')
+        self.assertEqual(row['destination_reset_input_ports'], [])
+
     def test_all_eight_mappings_trace_data_but_leave_reset_unknown(self):
         for clock in "PN":
             for polarity in "PN":
@@ -45,6 +74,8 @@ class AsyncResetTest(unittest.TestCase):
         rows = check(net(cells), "top")
         candidate = next(r for r in rows if r["classification"] == "CANDIDATE_SYNCHRONIZER")
         self.assertEqual(candidate["source_reset"]["bit"], "20")
+        self.assertEqual(candidate['source_reset_origin'], 'direct_primary_input')
+        self.assertEqual(len(candidate['source_reset_input_ports']), 1)
         self.assertEqual(sum(r["classification"] == "UNKNOWN" for r in rows), 3)
 
     def test_malformed_reset_ports_never_get_semantics(self):
