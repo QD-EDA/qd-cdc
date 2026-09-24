@@ -92,6 +92,14 @@ and edges. Input-domain declarations still do not specify launch edges.
 See [clock endpoint evidence](CLOCK_ENDPOINT_EVIDENCE.md) for the Caliptra pilot
 and supported limits.
 
+Mapped endpoints also carry `*_clock_origin`. A directly driven input has its
+top-level port aliases. A uniquely driven one-hop `$_AND_` or `$_BUF_` clock net
+lists the gate cell/type/source annotation and each input pin's direct input
+aliases. Any internal/ambiguous/constant/unsupported input yields `UNKNOWN`.
+The two `$_AND_` inputs are symmetric: this trace does not identify a clock
+master or gate control, validate glitch freedom, or change any CDC classification.
+See [one-hop pilot evidence](CLOCK_ORIGIN_EVIDENCE.md).
+
 ## Ambiguous connectivity
 
 Data nets with multiple supported/unsupported drivers remain UNKNOWN for every
