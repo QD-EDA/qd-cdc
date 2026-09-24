@@ -69,7 +69,9 @@ def main():
             first=run(name+'-check',cmd);again=run(name+'-repeat',cmd)
             if first.returncode!=1 or again.returncode!=1 or first.stdout!=again.stdout:
                 raise ValueError(name+': expected deterministic findings / exit 1')
-            ports=json.loads(netlist.read_text())['modules'][TOP]['ports']
+            module=json.loads(netlist.read_text())['modules'][TOP]
+            ports=module['ports']
+            cells=module['cells']
             rows=json.loads(first.stdout)['findings']
             crossings=[r for r in rows if r['classification']=='CROSSING']
             if len(crossings)!=2 or any(r['classification']=='CANDIDATE_SYNCHRONIZER' for r in rows):
@@ -77,6 +79,7 @@ def main():
             prefix='gen_rz_hs_protocol' if mode else 'gen_nrz_hs_protocol'
             expected={prefix+'.'+s for s in (('src_fsm_q','dst_fsm_q') if mode else ('src_req_q','dst_ack_q'))}
             observed=set()
+            stage_pairs=[]
             for row in crossings:
                 names={a['name'] for a in row['source_q_aliases']}
                 launch=names & expected
@@ -92,11 +95,44 @@ def main():
                     raise ValueError(name+': wrong launch/capture clock')
                 if {'name':capture,'offset':0} not in row['destination_d_aliases']:
                     raise ValueError(name+': wrong capture stage')
+                # Independent raw-pin inventory; no QD topology helper is used.
+                first_name=row['destination_cell']
+                first=cells[first_name]
+                q=first['connections']['Q'][0]
+                drivers=sorted((cell_name,pin) for cell_name,cell in cells.items()
+                               for pin,bits in cell['connections'].items()
+                               if q in bits and cell.get('port_directions',{}).get(pin)=='output')
+                if drivers!=[(first_name,'Q')] or any(
+                        q in port.get('bits',[]) and port.get('direction')=='input'
+                        for port in ports.values()):
+                    raise ValueError(name+': first-stage Q driver ambiguity')
+                consumers=sorted((cell_name,pin) for cell_name,cell in cells.items()
+                                 for pin,bits in cell['connections'].items()
+                                 if q in bits and cell.get('port_directions',{}).get(pin)!='output')
+                consumers+=sorted(('TOP_OUTPUT',port_name) for port_name,port in ports.items()
+                                  if port.get('direction') in ('output','inout') and q in port.get('bits',[]))
+                consumers.sort()
+                if len(consumers)!=1 or consumers[0][1]!='D':
+                    raise ValueError(name+': first-stage Q fanout mismatch')
+                second_name=consumers[0][0]
+                second=cells[second_name]
+                if (first['type']!=second['type'] or
+                        any(first['connections'].get(pin)!=second['connections'].get(pin)
+                            for pin in ('C','R'))):
+                    raise ValueError(name+': second-stage clock/reset mismatch')
+                structure=row.get('synchronizer_structure',{})
+                if (structure.get('status')!='two_stage_structure' or
+                        structure.get('safety')!='UNKNOWN' or
+                        structure.get('first_stage',{}).get('cell')!=first_name or
+                        structure.get('second_stage',{}).get('cell')!=second_name or
+                        structure.get('first_q_consumers')!=[{'cell':second_name,'port':'D'}]):
+                    raise ValueError(name+': QD/raw stage inventory disagreement')
+                stage_pairs.append([first_name,second_name])
             if observed!=expected:
                 raise ValueError(name+': missing handshake direction')
             summaries.append(dict(configuration=name,qualification='UNKNOWN',crossings=2,
                                   unknowns=sum(r['classification']=='UNKNOWN' for r in rows),
-                                  launch_signals=sorted(observed)))
+                                  launch_signals=sorted(observed),stage_pairs=sorted(stage_pairs)))
         if subprocess.check_output(['git','status','--porcelain'],cwd=ot,text=True):
             raise ValueError('application tree changed')
         (out/'summary.json').write_text(json.dumps(dict(opentitan=PIN,

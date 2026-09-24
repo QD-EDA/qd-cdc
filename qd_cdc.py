@@ -259,6 +259,48 @@ def check(data, top, input_domains=None, max_traversal_work=1_000_000):
     second_stage = defaultdict(list)
     for ff in ffs.values():
         second_stage[ff['d']].append(ff)
+    consumers = defaultdict(list)
+    for name, cell in cells.items():
+        conns = cell.get('connections')
+        dirs = cell.get('port_directions')
+        for port, bits in (conns.items() if isinstance(conns, dict) else []):
+            if isinstance(dirs, dict) and dirs.get(port) == 'output':
+                continue
+            for bit in bits if isinstance(bits, list) else []:
+                if type(bit) is int and bit >= 0:
+                    consumers[bitkey(bit)].append({'cell': name, 'port': port})
+    for name, port in mod.get('ports', {}).items():
+        if port.get('direction') in {'output', 'inout'}:
+            for bit in port.get('bits', []):
+                if type(bit) is int and bit >= 0:
+                    consumers[bitkey(bit)].append({'cell': 'TOP_OUTPUT', 'port': name})
+    for uses in consumers.values():
+        uses.sort(key=lambda use: (use['cell'], use['port']))
+
+    def sync_structure(first):
+        """Report mapped topology only; annotation and protocol safety are separate."""
+        bit = first['q']
+        uses = consumers[bit]
+        stages = second_stage[bit]
+        second = stages[0] if len(stages) == 1 else None
+        if (bit.startswith("'") or drivers.get(bit) != [(first['name'], 'Q')] or
+                unknowns.get(bit) or bit in inputs):
+            reason = 'first-stage Q has ambiguous driver'
+        elif second is None:
+            reason = 'no unique mapped second stage'
+        elif uses != [{'cell': second['name'], 'port': 'D'}]:
+            reason = 'first-stage Q has other consumers'
+        elif (first['clk'] != second['clk'] or first['edge'] != second['edge'] or
+              first.get('reset') != second.get('reset') or
+              first.get('reset_bit') != second.get('reset_bit')):
+            reason = 'clock/edge/reset mismatch'
+        else:
+            reason = ''
+        return {'status': 'UNKNOWN' if reason else 'two_stage_structure', 'safety': 'UNKNOWN',
+                'first_stage': {'cell': first['name'], 'location': first['src'], 'q_bit': bit},
+                'second_stage': ({'cell': second['name'], 'location': second['src']}
+                                 if second else None),
+                'first_q_consumers': uses, 'reason': reason}
     reports = []
     for name, typ, src in unknown_cells:
         reports.append({"top": top, "source_cell": name, "source_clock": "UNKNOWN", "destination_cell": name,
@@ -301,7 +343,8 @@ def check(data, top, input_domains=None, max_traversal_work=1_000_000):
                              dst["async"] and following["async"])
                 reports.append({"top": top, "source_cell": src["name"], "source_clock": src["clk"], "destination_cell": dst["name"],
                                 "destination_clock": dst["clk"], "path": list(path),
-                                "classification": "CANDIDATE_SYNCHRONIZER" if candidate else "CROSSING", "source": dst["src"] or src["src"]})
+                                "classification": "CANDIDATE_SYNCHRONIZER" if candidate else "CROSSING", "source": dst["src"] or src["src"],
+                                "synchronizer_structure": sync_structure(dst)})
             if path == limit_path:
                 reports[-1].update(analysis_incomplete=True, max_traversal_work=max_traversal_work)
             if src and 'source_ports' in src:

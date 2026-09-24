@@ -46,6 +46,18 @@ gate input to be a direct, internally undriven primary input. Leave all other
 origins UNKNOWN and all crossing/candidate decisions unchanged. Do not label
 an AND input as the master clock or claim glitch-free clock gating.
 
+## Two-stage synchronizer structure
+
+Annotate existing crossing/candidate findings with the first mapped flop Q,
+all direct Q consumers, and a unique direct second mapped flop. An exact chain
+requires a single unambiguous Q driver, only the second-stage D as a consumer,
+and matching clock net/edge/reset mapping. Retain source annotations and an
+explicit UNKNOWN safety status. Missing or malformed stages, side consumers,
+exports, and ambiguous drivers remain visible without changing classifications,
+finding counts, or exit codes. Compare the pinned OpenTitan request/acknowledge
+netlists with a separate raw-pin inventory; do not infer handshake or reset
+safety from two flops.
+
 ## Ambiguous data connectivity
 
 Propagate multiple-driver uncertainty through supported combinational traversal,
