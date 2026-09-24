@@ -38,6 +38,14 @@ them. Include endpoint clock bits/edges without changing report containers or ex
 codes. Preserve resolved same-edge behavior and primary-input assumption semantics;
 do not infer generated-clock relationships or half-cycle timing safety.
 
+## One-hop clock-origin provenance
+
+On mapped flop endpoints, expose direct input port aliases and the raw pin/port
+connections of a uniquely driven `$_AND_` or `$_BUF_` clock net. Require each
+gate input to be a direct, internally undriven primary input. Leave all other
+origins UNKNOWN and all crossing/candidate decisions unchanged. Do not label
+an AND input as the master clock or claim glitch-free clock gating.
+
 ## Ambiguous data connectivity
 
 Propagate multiple-driver uncertainty through supported combinational traversal,

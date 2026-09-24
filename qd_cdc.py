@@ -157,6 +157,25 @@ def check(data, top, input_domains=None, max_traversal_work=1_000_000):
     def clock_resolved(bit):
         return bit in inputs and not drivers.get(bit) and not unknowns.get(bit)
 
+    def clock_origin(bit):
+        """Describe direct input or one mapped gate hop; never infer clock safety."""
+        if clock_resolved(bit) and reset_input_ports[bit]:
+            return {'kind': 'direct_primary_input', 'ports': reset_input_ports[bit]}
+        if bit in inputs or unknowns.get(bit) or len(drivers.get(bit, [])) != 1:
+            return {'kind': 'UNKNOWN'}
+        name, pin = drivers[bit][0]
+        cell = cells[name]
+        if pin != 'Y' or cell.get('type') not in {'$_AND_', '$_BUF_'}:
+            return {'kind': 'UNKNOWN'}
+        origins = []
+        for pin in COMB[cell['type']]:
+            source_bit = bitkey(cell['connections'][pin][0])
+            if not clock_resolved(source_bit) or not reset_input_ports[source_bit]:
+                return {'kind': 'UNKNOWN'}
+            origins.append({'pin': pin, 'bit': source_bit, 'ports': reset_input_ports[source_bit]})
+        return {'kind': 'one_hop_combinational', 'cell': name, 'cell_type': cell['type'],
+                'location': cell.get('attributes', {}).get('src', ''), 'inputs': origins}
+
     # Stable traversal order matters when a finite budget yields a partial report.
     for entries in drivers.values():
         entries.sort()
@@ -299,6 +318,7 @@ def check(data, top, input_domains=None, max_traversal_work=1_000_000):
                 report[f"{role}_{pin}_aliases"] = aliases.get(endpoint[pin], [])
                 report[f"{role}_clock_bit"] = endpoint['clk']
                 report[f"{role}_clock_edge"] = endpoint['edge']
+                report[f"{role}_clock_origin"] = clock_origin(endpoint['clk'])
             if "reset" in endpoint:
                 report[f"{role}_reset"] = endpoint["reset"]
                 report[f"{role}_reset_bit"] = endpoint["reset_bit"]
