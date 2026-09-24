@@ -54,3 +54,16 @@ handshake correctness, reset release, metastability containment, FIFO behavior,
 reconvergence safety or full CDC qualification. Module names never imply safety.
 The production roadmap still requires pinned Linux tooling, protocol proofs,
 independent CDC comparison and the full clock/reset configuration matrix.
+
+## Reset input identity extension
+
+The mapped reset findings now name direct top-level input aliases without
+changing their UNKNOWN reset-relationship classification. On the same pinned
+netlists, an independent port-bit lookup gives four flops on `rst_src_ni` and
+four on `rst_dst_ni` in each NRZ frontend, and three on each port in slang RZ.
+QD's `*_reset_input_ports` and `*_reset_origin` match those counts; all origins
+are `direct_primary_input`. A QD-only internal-driver fixture makes the origin
+UNKNOWN while retaining the port alias, and a constant reset has no input port.
+No assertion/deassertion timing, cross-domain reset coordination or protocol
+safety follows from a direct port identity. The native RZ frontend failure
+remains unchanged.

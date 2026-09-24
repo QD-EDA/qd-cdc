@@ -35,6 +35,11 @@ Every mapped reset endpoint emits an UNKNOWN finding: assertion/deassertion
 relationships, reset-domain crossings and release timing are not verified yet.
 JSON findings carry `source_reset` / `destination_reset` when applicable, with
 bit, active level, reset value and clock edge. Constants do not waive this check.
+They also list `source_reset_input_ports` / `destination_reset_input_ports`
+with port names and bit-array offsets. `*_reset_origin` is
+`direct_primary_input` only when that reset net has an input port and no
+internal driver; otherwise it is `UNKNOWN`. A named input is an identity trace,
+not a reset timing or release guarantee.
 Candidate chains additionally require equal destination-stage clock edges and
 reset mappings; annotations still provide no proof. Other reset/enable/latch
 families remain unsupported. [Pilot evidence](ASYNC_RESET_EVIDENCE.md) documents

@@ -91,10 +91,14 @@ def check(data, top, input_domains=None, max_traversal_work=1_000_000):
         names.sort(key=lambda item: (item['name'], item['offset']))
     primary = input_domain_sources(mod.get('ports', {}), input_domains) if input_domains is not None else None
     drivers, unknowns, ffs, inputs = defaultdict(list), defaultdict(list), {}, set()
+    reset_input_ports = defaultdict(list)
     unknown_cells = []
-    for name, p in mod.get("ports", {}).items():
+    for name, p in sorted(mod.get("ports", {}).items()):
         if p.get("direction") == "input":
             inputs.update(map(bitkey, p.get("bits", [])))
+            for offset, bit in enumerate(p.get("bits", [])):
+                if type(bit) is int and bit >= 0:
+                    reset_input_ports[bitkey(bit)].append({'port': name, 'offset': offset})
     for name, c in cells.items():
         typ, conns = c.get("type", ""), c.get("connections", {})
         dirs = c.get("port_directions", {})
@@ -298,6 +302,11 @@ def check(data, top, input_domains=None, max_traversal_work=1_000_000):
             if "reset" in endpoint:
                 report[f"{role}_reset"] = endpoint["reset"]
                 report[f"{role}_reset_bit"] = endpoint["reset_bit"]
+                bit = endpoint["reset_bit"]
+                ports = reset_input_ports[bit]
+                report[f"{role}_reset_input_ports"] = ports
+                report[f"{role}_reset_origin"] = ('direct_primary_input' if ports and not drivers.get(bit)
+                                                  and not unknowns.get(bit) else 'UNKNOWN')
     reports.sort(key=lambda r: (r["destination_cell"], r["source_cell"], r["classification"], r["path"]))
     return reports
 
