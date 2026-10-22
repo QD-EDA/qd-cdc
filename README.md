@@ -180,3 +180,7 @@ findings remain visible. Unexamined path counts are unknown, not zero. Exit 1
 prevents an incomplete traversal from appearing clean. Invalid budgets exit 2.
 This is not a wall-time or total-memory cap: loading, inventory, sorting and
 metadata are outside this budget. See [traversal evidence](TRAVERSAL_EVIDENCE.md).
+
+## Status
+
+Active prototype, Sep 2026.
